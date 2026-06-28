@@ -51,13 +51,28 @@ Claude Code を再起動後、有効化します：
 | `/naigios off` | 無効化 |
 | `/naigios` | 状態確認 |
 
+## モデル設定
+
+評価に使用するモデルは以下の優先順で解決されます：
+
+1. **`~/.claude/.naigios_config`** — `model=` 行で明示指定
+2. **トランスクリプト自動検出** — 現在のセッションで Claude Code が使用しているモデルを自動取得
+3. **デフォルト** — `claude-haiku-4-5-20251001`
+
+設定例：
+
+```
+# ~/.claude/.naigios_config
+model=claude-sonnet-4-6
+```
+
 ## 評価スコアリング
 
-5軸（明瞭性・完全性・無矛盾性・直接性・可操作性）で 0〜100 点満点。**70 点未満** で OPEN 判定 → `claude-haiku-4-5-20251001` が評価し、prompt-perfect が自動起動。
+5軸（明瞭性・完全性・無矛盾性・直接性・可操作性）で 0〜100 点満点。**70 点未満** で OPEN 判定 → 設定モデル（デフォルト: `claude-haiku-4-5-20251001`）が評価し、prompt-perfect が自動起動。
 
 直前のアシスタントの発言もコンテキストとして加味するため、確認質問への短い返答は false positive になりません。
 
 ## 前提条件
 
-- macOS + Claude Code VSCode 拡張
+- Claude Code（VSCode 拡張・デスクトップアプリ・CLI いずれも可）
 - Python 3.9 以上（stdlib のみ使用）

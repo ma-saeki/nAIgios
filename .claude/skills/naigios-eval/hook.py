@@ -12,9 +12,36 @@ import sys
 FLAG_FILE = os.path.expanduser("~/.claude/.naigios_active")
 SKILL_DIR = os.path.dirname(os.path.abspath(__file__))
 EVAL_PROMPT_FILE = os.path.join(SKILL_DIR, "eval_prompt.txt")
-MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+CONFIG_FILE = os.path.expanduser("~/.claude/.naigios_config")
 OPEN_THRESHOLD = 70
 LOG_FILE = os.path.expanduser("~/.claude/.naigios_debug.log")
+
+
+def get_model(transcript_path: str) -> str:
+    """モデル解決: 設定ファイル → transcript自動検出 → デフォルト"""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("model="):
+                        return line.split("=", 1)[1].strip()
+        except Exception:
+            pass
+    if transcript_path:
+        try:
+            with open(transcript_path, encoding="utf-8") as f:
+                lines = [l.strip() for l in f if l.strip()]
+            for line in reversed(lines):
+                entry = json.loads(line)
+                if entry.get("type") == "assistant":
+                    model = entry.get("message", {}).get("model")
+                    if model:
+                        return model
+        except Exception:
+            pass
+    return DEFAULT_MODEL
 
 
 def log(msg: str) -> None:
@@ -92,14 +119,24 @@ def main() -> None:
         log(f"exit: eval_prompt read error: {e}")
         sys.exit(0)
 
-    # claude CLI のパスを特定（VSCode 拡張のバイナリを使用）
-    candidates = glob.glob(
-        os.path.expanduser("~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude")
-    )
-    if not candidates:
+    # claude CLI のパスを特定
+    # 優先順: CLAUDE_CODE_EXECPATH env var → VSCode 拡張 glob → PATH
+    claude_bin = None
+    execpath = os.environ.get("CLAUDE_CODE_EXECPATH", "")
+    if execpath and os.path.isfile(execpath):
+        claude_bin = execpath
+    if not claude_bin:
+        candidates = glob.glob(
+            os.path.expanduser("~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude")
+        )
+        if candidates:
+            claude_bin = sorted(candidates)[-1]
+    if not claude_bin:
+        import shutil
+        claude_bin = shutil.which("claude")
+    if not claude_bin:
         log("exit: claude binary not found")
         sys.exit(0)
-    claude_bin = sorted(candidates)[-1]
     log(f"claude_bin: {claude_bin}")
 
     # claude -p で評価
@@ -107,8 +144,10 @@ def main() -> None:
     env = os.environ.copy()
     env["NAIGIOS_EVALUATING"] = "1"
     try:
+        model = get_model(transcript_path)
+        log(f"model: {model}")
         result = subprocess.run(
-            [claude_bin, "-p", eval_prompt, "--model", MODEL],
+            [claude_bin, "-p", eval_prompt, "--model", model],
             capture_output=True, text=True, timeout=30, env=env,
         )
         raw = result.stdout.strip()
